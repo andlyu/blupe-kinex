@@ -188,7 +188,7 @@ below; underlying model/checkpoint selections remain separate metadata.
   for that person. Record execution mode (such as `automated test`) and actual
   approach separately from human identity. Genuinely unattended/system activity
   has an explicit system identity; never fabricate a person's name or email.
-- [ ] Every advertised control primitive passes the offline command-contract
+- [x] Every advertised control primitive passes the offline command-contract
   gate through the actual parser/generator/serializer and canonical validator,
   including measured fractional starts, numeric endpoints, invalid-input and
   zero-dispatch failure tests. A required CI/release-preflight result and exact
@@ -599,3 +599,16 @@ The latest supported YAM1 read still reports stale hardware feedback, hardware_n
 Release safety state: the offline preflight is passed; `physical_command_contract` remains `pending_station_safety_calibration_review`. The outbound worker refuses hardware readiness until that required coverage is verified. A later station reconnection alone cannot enable Run. Runtime fingerprints include source/runtime files and exclude derived Python bytecode caches, which native tool imports may create.
 
 Website v4 is deployed from source `95d67463c6d0cc3f4e34b039d28be2289a7eb02e` (deployment `appgdep_6af582afe064819195f25ab8ce19430d`, succeeded). Public GitHub main synchronized. The source-only replay fixes are verified; no external physical recording or playback was available. This continuation does not change the six checked / eleven unchecked acceptance count.
+
+
+## Robo-house continuation — November 12, 2026
+
+User resumed with “lets finnish” and selected Robo-house YAM (“why not run on robohouse YAM?”). The target is now robot-ba8413962083809c. The current live queue confirms it connected, parked and queue-ready with fresh hardware status. YAM1 is disconnected; its observation's old queue-ready flag was cached. Queue admission and controller-owned initialization/Home are distinct from actuator readiness; no motion is permitted before fresh, homed, settled safe feedback and a valid lease.
+
+The Robo-house profile binds model calibration 93c4db966dca49dbb831a2215f4dfc5fb83bf82eabfe99b3035a027aa7fc9275, original_i2rt_model_corrected coordinates, 0.62 m base spacing, the exact offsets in the model's refs, model XML hash 22ed2648615c1e2fa8dfb0428e1b62d75a7a363374d6ce4b7bafe09ed5987edf and safety hash 172afc8a82d2b04fb03404e20ae5342a9272bdaae520b77e7caaa1e0c57bd965. Commands remain original encoder coordinates with no extra offsets. The live report must match before a write and again before buffer construction. The saved configuration is an additional local check; the gateway independently validates every leased command with its active configuration.
+
+Robo-house adds the exact canonical HardwareSafetyConfig/BimanualHardwareGuard source snapshot, swept FK workspace/table clearance and an actual collision-enabled model. Collision masks are set before MuJoCo compilation, so cached body masks are also valid. Only the two assembled world/first-link base bearings are excluded because the meshes have a fixed 6.1 mm assembly overlap; all free inter-arm/link and floor contacts remain enabled. A fixed in-workspace joint fixture produces real model contacts and rejects before dispatch. No remote safety setting is changed.
+
+The strict joint-endpoint regression exposed degree/radian round-trip rounding outside a legal bound. Only an already validated requested radian target's wire encoding is moved inward by at most four floating-point degree ULPs; all restored radians remain within the unchanged strict envelope. Invalid requested targets, including nextafter just outside a bound, still reject. Exact uninstructed measured joints are preserved. The failing preflight receipt and green regression are retained. Some legal joint endpoints are spatially inadmissible and correctly return workspace/collision rejection with zero outbound commands; tests do not disable those checks to force acceptance.
+
+The isolated required gate passed 28 Python tests, including native MCP/core/JSONL-driver/bridge/controller/serializer runs for both stations: 124 native cases each, 60 YAM1 wire-spy packets and 56 Robo-house wire-spy packets. Source, mesh, controller snapshot and upstream/runtime fingerprints are retained in evidence/preflight-robohouse.json. Seven real-SQLite website tests pass with Robo-house camera/history attribution. The Robo-house command-contract item is verified in software; YAM1 remains physically ineligible. Physical run, outcome, live onset/timing and real playback are not established by these tests.

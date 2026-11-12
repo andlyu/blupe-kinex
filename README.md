@@ -1,6 +1,6 @@
 # Kinex × BluPe
 
-Website source for https://kinex-blupe.andlyu.chatgpt.site. This is a real Kinex core/MCP integration with Astra through Codex, adapted to BluPe YAM1. Physical acceptance is pending; see the integration checklist.
+Website source for https://kinex-blupe.andlyu.chatgpt.site. This is a real Kinex core/MCP integration with Astra through Codex, adapted to Robo-house YAM. Physical acceptance is pending; see the integration checklist.
 
 The page displays real public robot camera frames, editable task/name/email, Run and Stop, actual tool activity, and retained run records. A Cloudflare Worker and D1 relay connect an outbound local Kinex worker without exposing subscription credentials, the robot session capability, or a local network port. Email remains in private run storage and is excluded from all public responses.
 
@@ -15,3 +15,5 @@ Run `npm run build` and `npm run validate` to check the website artifact. Deploy
 The user's November 12 request to launch the harness and make a new website invokes the copied BluPe harness authorization contract. It authorizes this integration's public source, public website and scoped robot verification. Hardware acceptance and replay/timing evidence remain unchecked until actually verified.
 
 Recording discovery uses the public BluPe recording index for the exact episode, YAM1 and Model=Kinex. Only matching approved BluPe/Hugging Face MP4 links become playable. Preparation, missing attribution and index failures remain visible and are checked again without rerunning hardware. Ten-times preview footage is labelled. Runner updates cannot inject a replay URL or erase a concurrently recovered recording. Seven offline Worker tests exercise the real SQLite queries; they do not prove physical footage exists.
+
+The user selected Robo-house YAM, robot-ba8413962083809c. Cameras, worker admission and replay matching now use that station. Operator-enabled parked readiness permits normal queue/Home startup; fresh safe homed/settled feedback is still required for every actuator buffer.
