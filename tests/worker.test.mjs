@@ -114,3 +114,17 @@ test('a recording resolved after runner snapshot read survives the atomic partia
   const row=(await send(env,'/api/state')).data.runs[0];assert.equal(row.replay,video);assert.equal(row.episode_id,episode);assert.equal(row.error,'Synthetic cleanup failure');
  }finally{env.DB.prepare=prepare;globalThis.fetch=originalFetch}
 });
+
+test('missing archive model requires exact independently matched live queue context',async()=>{
+ const env=environment(),{id,episode}=await completedRun(env);const original=globalThis.fetch;
+ const video='https://playground.blupe.io/api/quick-replays/'+episode+'/'+'d'.repeat(64)+'.mp4';
+ const context={run_id:episode,robot_id:'robot-ba8413962083809c',model_name:'Kinex',runner_name:'Offline fixture',task:'Synthetic recording fixture; no robot'};
+ let actual={...context,runner_name:'Someone else'};
+ try{
+  globalThis.fetch=async(input)=>String(input).startsWith('https://playground.blupe.io/')?Response.json({runs:[{episode_id:episode,robot_id:'robot-ba8413962083809c',model:null,video_url:video}]}):Response.json({public_run:actual});
+  assert.equal((await send(env,'/api/runs/'+id+'/replay')).data.state,'waiting_for_attribution');await ageLookup(env,id);
+  actual={...context,task:'Different task'};assert.equal((await send(env,'/api/runs/'+id+'/replay')).data.state,'waiting_for_attribution');await ageLookup(env,id);
+  actual=context;const result=(await send(env,'/api/runs/'+id+'/replay')).data;
+  assert.equal(result.state,'ready');assert.equal(result.attribution_source,'matched_live_queue_context');assert.equal(result.recording_index_model,null);assert.equal(result.url,video);
+ }finally{globalThis.fetch=original}
+});

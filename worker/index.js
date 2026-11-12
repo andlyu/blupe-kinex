@@ -21,7 +21,7 @@ function approvedReplay(saved){
  return /^ep_[A-Za-z0-9_-]{1,100}$/.test(episode||'')&&saved.configuration?.model==='Kinex'&&r?.state==='ready'&&r.episode_id===episode&&r.model==='Kinex'&&r.robot_id==='robot-ba8413962083809c'&&r.url===saved.replay?recordingUrl(saved.replay,episode):null;
 }
 async function resolveRecording(env,id){
- const run=await env.DB.prepare('SELECT snapshot FROM runs WHERE id=?').bind(id).first();if(!run)fail('Run not found',404);
+ const run=await env.DB.prepare('SELECT snapshot,runner_name,prompt FROM runs WHERE id=?').bind(id).first();if(!run)fail('Run not found',404);
  const saved=JSON.parse(run.snapshot),episode=saved.episode_id,ready=approvedReplay(saved);
  if(ready)return {...saved.recording,state:'ready',url:ready};
  if(saved.recording?.state!=='ready'&&saved.recording?.checked_at&&Date.now()-saved.recording.checked_at<3000)return saved.recording;
@@ -33,8 +33,16 @@ async function resolveRecording(env,id){
   if(!response.ok)throw new Error('Recording index unavailable');
   const catalog=await response.json(),row=catalog.runs?.find(r=>r.episode_id===episode);
   if(row){
-   if(row.robot_id!=='robot-ba8413962083809c'||row.model!=='Kinex')result={...result,state:'waiting_for_attribution',reason:'Waiting for matching Robo-house YAM and Kinex recording attribution.'};
-   else {const video=recordingUrl(row.video_url,episode);if(video)result={state:'ready',url:video,checked_at:Date.now(),episode_id:episode,robot_id:'robot-ba8413962083809c',model:'Kinex',preview_speed:Number.isFinite(row.preview_speed)?row.preview_speed:1,duration_s:Number.isFinite(row.video_duration_s)?row.video_duration_s:null};}
+   let method=row.model==='Kinex',attribution_source='recording_index';
+   if(row.robot_id==='robot-ba8413962083809c'&&row.model==null){
+    const response=await fetch('https://yam-session-api.n5hthc3gj4cqy.us-east-1.cs.amazonlightsail.com/v1/queue?robot_id=robot-ba8413962083809c',{signal:AbortSignal.timeout(8000)});
+    if(!response.ok)throw new Error('Run context temporarily unavailable');
+    const actual=(await response.json()).public_run;
+    method=actual?.run_id===episode&&actual.robot_id==='robot-ba8413962083809c'&&actual.model_name==='Kinex'&&actual.runner_name===run.runner_name&&actual.task===run.prompt;
+    attribution_source='matched_live_queue_context';
+   }
+   if(row.robot_id!=='robot-ba8413962083809c'||!method)result={...result,state:'waiting_for_attribution',reason:'Waiting for matching Robo-house YAM and Kinex recording attribution.'};
+   else {const video=recordingUrl(row.video_url,episode);if(video)result={state:'ready',url:video,checked_at:Date.now(),episode_id:episode,robot_id:'robot-ba8413962083809c',model:'Kinex',recording_index_model:row.model??null,attribution_source,preview_speed:Number.isFinite(row.preview_speed)?row.preview_speed:1,duration_s:Number.isFinite(row.video_duration_s)?row.video_duration_s:null};}
   }
  }catch{result={...result,state:'temporarily_unavailable',reason:'Recording lookup is unavailable. It will be checked again without rerunning the robot.'}}
  // A ready result wins. A non-ready result may only replace the version it read.
