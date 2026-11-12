@@ -179,7 +179,7 @@ below; underlying model/checkpoint selections remain separate metadata.
 - [x] When a human joins, collect or confirm their name and email. Prefill known
   identity/default values where available and let the runner edit both fields
   before joining.
-- [ ] Run context includes the actual approach and confirmed runner identity;
+- [x] Run context includes the actual approach and confirmed runner identity;
   the website makes clear which method is running and whose run it is.
 - [x] Policy/model tests initiated by a person retain that actual user's
   confirmed name as runner. Use available identity and editable name/email
@@ -198,9 +198,9 @@ below; underlying model/checkpoint selections remain separate metadata.
   the requested object/result state; a narrower smoke test is labelled as such.
   Relevant failures or changed control code reopen affected requirements and
   the current passed/total display, preserving earlier results as history.
-- [ ] A person can use the website to run the integrated paper's method on
+- [x] A person can use the website to run the integrated paper's method on
   physical YAM robots/arms. Record a verified physical execution of that method.
-- [ ] The actual physical arms are visible live on the website while the method
+- [x] The actual physical arms are visible live on the website while the method
   runs, so a visitor can see that it is executing on real hardware.
 - [ ] Immediately after a run finishes, the person can replay that just-completed
   physical YAM execution through the website, with retained footage showing the
@@ -601,6 +601,19 @@ Release safety state: the offline preflight is passed; `physical_command_contrac
 Website v4 is deployed from source `95d67463c6d0cc3f4e34b039d28be2289a7eb02e` (deployment `appgdep_6af582afe064819195f25ab8ce19430d`, succeeded). Public GitHub main synchronized. The source-only replay fixes are verified; no external physical recording or playback was available. This continuation does not change the six checked / eleven unchecked acceptance count.
 
 
+## Blocked audit — November 12, 2026
+
+Previous goal turn was progress: native command-path coverage, replay recovery fixes, source publication and Site v5 deployment changed authoritative state. This third consecutive goal turn revalidated the same external hardware blocker rather than restarting a timed-out process. The owned outbound worker handle 17568 is confirmed live; zero Kinex runs exist. Supported YAM1 hardware feedback remains about 5,891 seconds old, with safety.ok=false, hardware_not_initialized, homed=false and settled=false. No queue entry, identity submission, physical command, movement or recording occurred during the audit.
+
+All CI for runtime source `f90d9ff130f64f7f438d90553de63fe4af6116bb` is now terminal and passed: [Kinex command contract](https://github.com/andlyu/blupe-remote-bots/actions/runs/43189816912), [shared runner PR](https://github.com/andlyu/blupe-remote-bots/actions/runs/43189816576), [shared runner push](https://github.com/andlyu/blupe-remote-bots/actions/runs/43189806818), and [RoboHarness contract](https://github.com/andlyu/blupe-remote-bots/actions/runs/43189816573). No failed or pending CI is used as physical evidence.
+
+The supported static calibration endpoint is available with the arms off. Its native joint calibration matches the pinned `6b24647ab8fe4b87dcee2cfb0100b1df8a7b8133ac8839bb37b0ba1cf37260df`, native_i2rt_updated convention and zero additional offsets. Its report-level camera calibration ID is a different, separate identity. The response includes retained nested safety provenance but does not establish the current active controller safety configuration; quality remains experimental_requires_fresh_validation. See [compact audit evidence](evidence/blocker-audit-calibration.json). A stale pose or static report cannot substitute for fresh station readiness or validate collision geometry. The existing pending physical-command gate remains in force.
+
+Current public website is v5, source `441dbfd12d7bf9c107f97b18958787569e33a535`, deployment `appgdep_6af583f4d5108191951167141b2b8e18` succeeded; public GitHub main is synchronized. The software/UI runtime is delivered; the integration is not complete. Current acceptance remains six checked and eleven unchecked. Remaining items are human queue/join confirmation, actual run context, full command-contract safety/calibration acceptance, representative physical task, physical execution, live moving-arm footage, immediate replay, historical replay, per-run physical onset timing, live wait-stage transitions and final normal-UI physical run. No timing, visibility or physical-test exception is claimed.
+
+External condition needed to resume: restore and initialize YAM1, obtain fresh safe hardware feedback and verify the active controller/safety/calibration binding. Then finish the existing mandatory command-contract review and perform the previously authorized bounded physical verification through the normal website. Do not enable Run by editing the pending marker alone, bypass readiness, fabricate footage, reset timing clocks, or replay an uncertain movement. Confirmed human identity and original user invocation remain valid; no duplicate permission request is needed for covered verification. The local worker stays live with Run disabled.
+
+
 ## Robo-house continuation — November 12, 2026
 
 User resumed with “lets finnish” and selected Robo-house YAM (“why not run on robohouse YAM?”). The target is now robot-ba8413962083809c. The current live queue confirms it connected, parked and queue-ready with fresh hardware status. YAM1 is disconnected; its observation's old queue-ready flag was cached. Queue admission and controller-owned initialization/Home are distinct from actuator readiness; no motion is permitted before fresh, homed, settled safe feedback and a valid lease.
@@ -621,3 +634,29 @@ Site v6 (378e51b92c4078963a4e29d65857483a1d1fc13d) deployed successfully and its
 The worker now derives active/terminal behavior from the controller's supported status snapshot and keeps readiness false through cleanup. A required whole-worker regression exercises real pinned RunnerController with a synthetic queued/Stop transport and no model or actuator dispatch; the previous code fails and the repair passes. See queued-worker-regression.json and preflight-robohouse-worker.json. The full gate now passes 29 Python tests plus both stations' native tool cases and the lifecycle gate. Automated verification has an explicit execution-mode CLI flag, separate from human identity. The first attempt's interactive metadata is retained as history; the next root-driven test is explicitly automated_verification.
 
 Website request validation now matches the existing backend's minimum 60-second run and maximum 32-character runner name, with regression assertions. No source or public API response contains the confirmed private email. Human join/identity collection is verified even though execution failed before an episode; current software/join acceptance is eight of seventeen. The remaining nine items require actual method/run context, representative physical outcome, physical execution/live footage, immediate and historical replay, onset timing, live wait-stage verification and final normal-UI physical run. No physical or timing acceptance is inferred from this failed attempt.
+
+
+### Second normal-UI attempt, status repair and recording recovery
+
+Site v7 job `25fda63b-b886-4ed4-940d-a8f1d69a2537`, backend session `sess_78089e0503ef47a9`, episode `ep_9664b64abe26457c`, was admitted on Robo-house and completed controller-owned Home. Kinex/Astra performed real camera/state reads. A left-gripper 0.5 buffer (2 seconds, 20 waypoints) reached `packet_submit` for `traj_ep_9664b64abe26457c_0` at 1794494745.933030; Stop was requested at 1794494746.284991 and stopped at 1794494747.037345. No acceptance or measured-completion receipt was retained. Its execution outcome is uncertain, and this movement must not be automatically replayed. Zero last-published counters do not establish zero physical dispatch.
+
+The worker status poll failed because `kinex_command`/`kinex_feedback` used integer metadata named `waypoints`, a reserved list field in the actual controller journal compactor. The metadata is now `waypoint_count`. The native command gate now wires the real controller journal and status compaction through actual native tools and dispatch. Restoring the old integer metadata in an isolated child reproduces the same TypeError; the fixed pinned release passes 29 Python tests and the native lifecycle/direct-schema/explicit-deny checks. See `evidence/status-compaction-red.json` and `evidence/preflight-direct-tools.json`. No hardware safety or packet bounds changed. The isolated source excludes unrelated shared-controller changes in the current working checkout.
+
+The old MCP catalog required repeated discovery calls: the first packet was submitted about 74.7 seconds after model start, so no timing pass is claimed. The new facade directly exposes the four native Kinex schemas through the official RuntimeSession/core. The authorized host activates it; explicit Kinex denial, cancellation and Stop still use upstream handling. Fresh initial camera images/state are supplied to Astra. Actual latency remains to be measured.
+
+Site v8 source `aec8287bba85cc9b14aad60263e1d10da47012db`, deployment `appgdep_6af5d83a7820819183663db1b1fa5d48`, succeeded. The recording index omitted its model; an exact independently matched public queue record confirms the same episode, Robo-house station, Kinex approach, andrew and task. Recovery retains `recording_index_model: null` and `attribution_source: matched_live_queue_context`; it rejects explicitly conflicting attribution. Eight real-SQLite tests pass. Its retained preview hash is `738fa8719964ba2bdf2f884099e0e654651c0b03b547a6f9549f38a36e70ef7c`, 32.533 seconds, marked 2x and EDITED REPLAY. The top-only edited footage does not clearly settle the uncertain gripper command or establish precise physical-onset timing. Ownerless session/trace access returned 403; reading the stopped trace through its original owned worker was prevented by macOS task-port entitlement restrictions. No access protection or OS privilege was changed and no credentials were copied. Future runs now retain private ownership, independent transport receipts and final backend traces.
+
+The failed physical attempt, old timings and unknown command remain history. Physical task success, successful method-motion playback and final normal-UI acceptance remain unchecked. No timing exception is claimed.
+
+
+### Verified physical wrist and gateway feedback repair
+
+Normal UI job `dac55616-1277-4b79-8445-1987c7e4b924`, episode `ep_1dcfbe6dca464637`, session `sess_f594014f1e4c4d7e`, executed one right-wrist +0.08 rad buffer on real Robo-house through Kinex/Astra. All ten ordered waypoint receipts and a completed gateway result were retained privately; sanitized evidence is `evidence/robohouse-attempt-03.json`. Live cameras visibly showed the wrist move. The packet's measured final wrist was 3.3113 degrees and the existing target tolerance passed. No other task primitive completed. Normal Stop/parking released the lease. The previous uncertain left-gripper command was not replayed.
+
+The adapter then stopped on the capability-scoped gateway observation's omitted source field, even though the shared controller had corroborated fresh hardware and settled completion. The repaired adapter independently reads fresh safe settled hardware under the same lease and validates both gateway and live measured targets; it does not merely trust a missing source. The gateway defines `homed` as currently being at Home, not initialization history. Startup Home is now independently verified once and bound to the session/episode/lease; following writes still require fresh safe settled hardware, unchanged lease, strict calibration and swept controller guards. A changed lease or absent initial Home still rejects. The episode binding is preserved when the public hardware snapshot omits it.
+
+The old completion function reproduces the failure; see `evidence/hardware-feedback-red.json`. The exact isolated release passes 32 Python tests plus native direct-schema, explicit-deny and lifecycle tests; every native fixture now uses the real gateway's missing-source completion shape. See `evidence/preflight-hardware-feedback.json`. All public/private source distinctions and guards remain intact.
+
+This physical run missed onset timing. No 15-second/30-second pass or timing exception is claimed. The attempted timed screenshot helper produced no frames; live screenshot observations and retained backend receipts establish a wrist motion, but do not constitute the required continuous UI timing record. That requirement remains unchecked. The new prompt supplies actual loaded device IDs, radians, profile bounds and exact native write syntax, reducing unnecessary discovery; its latency must still be measured.
+
+The integration remains incomplete pending a full representative task, browser-playable method footage, timing/wait-stage verification and final normal-UI acceptance. Earlier source-only successes remain history rather than substitutes for these requirements.
