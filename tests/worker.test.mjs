@@ -12,6 +12,8 @@ test('origin/CSRF, one active run, claim once, owner Stop, and public email reda
  assert.equal((await send(env,'/api/runs',task,h)).status,503);
  assert.equal((await send(env,'/api/runner/heartbeat',{ready:true,message:'Synthetic offline fixture'},auth)).status,200);
  assert.equal((await send(env,'/api/runs',{...task,name:'Anonymous'},h)).status,400);
+ assert.equal((await send(env,'/api/runs',{...task,duration_s:30},h)).status,400);
+ assert.equal((await send(env,'/api/runs',{...task,name:'a'.repeat(33)},h)).status,400);
  const requestId='12345678-1234-4234-8234-123456789abc';const first=await send(env,'/api/runs',{...task,request_id:requestId},h);assert.equal(first.status,201);const id=first.data.id;assert.equal(id,requestId);
  assert.equal((await send(env,'/api/runs',task,h)).status,409);
  const publicState=await send(env,'/api/state');assert(!JSON.stringify(publicState.data).includes(task.email));assert(!JSON.stringify(publicState.data).includes(token));assert.equal(publicState.data.runs[0].owned,false);assert.equal((await send(env,'/api/state',undefined,h)).data.runs[0].owned,true);
