@@ -1,0 +1,7 @@
+dist/
+site.tar.gz
+.wrangler/
+.dev.vars
+wrangler.local.json
+node_modules/
+*.log
