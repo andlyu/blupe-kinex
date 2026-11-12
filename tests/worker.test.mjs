@@ -14,7 +14,7 @@ test('origin/CSRF, one active run, claim once, owner Stop, and public email reda
  assert.equal((await send(env,'/api/runs',{...task,name:'Anonymous'},h)).status,400);
  const first=await send(env,'/api/runs',task,h);assert.equal(first.status,201);const id=first.data.id;
  assert.equal((await send(env,'/api/runs',task,h)).status,409);
- const publicState=await send(env,'/api/state');assert(!JSON.stringify(publicState.data).includes(task.email));assert(!JSON.stringify(publicState.data).includes(token));
+ const publicState=await send(env,'/api/state');assert(!JSON.stringify(publicState.data).includes(task.email));assert(!JSON.stringify(publicState.data).includes(token));assert.equal(publicState.data.runs[0].owned,false);assert.equal((await send(env,'/api/state',undefined,h)).data.runs[0].owned,true);
  const claim=await send(env,'/api/runner/claim',{},auth);assert.equal(claim.data.run.id,id);assert.equal(claim.data.run.email,task.email);
  assert.equal((await send(env,'/api/runner/claim',{},auth)).data.run,null);
  assert.equal((await send(env,'/api/runs/'+id+'/stop',{}, {...h,Cookie:'kinex-owner='+'b'.repeat(64),'X-Kinex-CSRF':'b'.repeat(64)})).status,403);
