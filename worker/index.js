@@ -51,12 +51,27 @@ async function resolveRecording(env,id){
  const latest=JSON.parse((await env.DB.prepare('SELECT snapshot FROM runs WHERE id=?').bind(id).first()).snapshot);
  return approvedReplay(latest)?{...latest.recording,state:'ready',url:approvedReplay(latest)}:latest.recording||result;
 }
+async function serveRecording(request,env,id){
+ const row=await env.DB.prepare('SELECT snapshot FROM runs WHERE id=?').bind(id).first();if(!row)fail('Run not found',404);
+ const source=approvedReplay(JSON.parse(row.snapshot));if(!source)fail('A verified recording is not ready for this run',409);
+ // Only retained, attributed URLs are eligible; this is not an arbitrary URL proxy.
+ if(new URL(source).origin!=='https://playground.blupe.io')return Response.redirect(source,302);
+ const range=request.headers.get('Range'),headers={'Accept':'video/mp4'};
+ if(range){if(range.length>80||!/^bytes=(?:\d+-\d*|-\d+)$/.test(range))fail('Unsupported video byte range',416);headers.Range=range}
+ const upstream=await fetch(source,{method:request.method,headers,redirect:'error',signal:AbortSignal.timeout(15000)});
+ if(![200,206,304,416].includes(upstream.status))fail('Recording delivery is temporarily unavailable',502);
+ if(upstream.status!==304&&upstream.status!==416&&!/^video\/mp4(?:;|$)/i.test(upstream.headers.get('Content-Type')||''))fail('Recording returned an unsupported media type',502);
+ const output=new Headers({'Content-Type':'video/mp4','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Accept-Ranges':'bytes'});
+ for(const key of ['Content-Length','Content-Range','ETag','Last-Modified'])if(upstream.headers.has(key))output.set(key,upstream.headers.get(key));
+ return new Response(request.method==='HEAD'||upstream.status===304?null:upstream.body,{status:upstream.status,headers:output});
+}
 export default {async fetch(request,env){const path=new URL(request.url).pathname;try{
  if(path==='/'&&request.method==='GET')return new Response(PAGE,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' https://playground.blupe.io https://huggingface.co https://*.huggingface.co https://*.hf.co; base-uri 'none'; frame-ancestors 'none'"}});
  if(path==='/api/browser'&&request.method==='GET'){const t=cookie(request)||random();return json({csrf:t},200,{'Set-Cookie':'kinex-owner='+t+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000'})}
  if(/^\/api\/cameras\/(top|left|right)$/.test(path)){const response=await fetch('https://yam-session-api.n5hthc3gj4cqy.us-east-1.cs.amazonlightsail.com/v1/robots/robot-ba8413962083809c/cameras/'+path.split('/').pop()+'.jpg');if(!response.ok)return json({error:'Live camera unavailable'},503);return new Response(response.body,{headers:{'Content-Type':'image/jpeg','Cache-Control':'no-store'}})}
  if(!env.DB)fail('Run storage is being configured. Refresh shortly.',503);
  if(path==='/api/state'&&request.method==='GET'){const s=await env.DB.prepare('SELECT * FROM runner WHERE id=1').first();const rows=await env.DB.prepare('SELECT * FROM runs ORDER BY created_at DESC LIMIT 30').all();return json({approach:'Kinex',underlying_model:'gpt-6-astra',station:'robot-ba8413962083809c',runner:s?{...JSON.parse(s.status),online:Date.now()-s.heartbeat_at<15000}:{online:false,message:'Waiting for the Kinex worker'},runs:rows.results.map(r=>({...publicRun(r),owned:r.owner===cookie(request)}))})}
+ if(/^\/api\/runs\/[a-f0-9-]+\/video$/.test(path)&&['GET','HEAD'].includes(request.method))return await serveRecording(request,env,path.split('/')[3]);
  if(/^\/api\/runs\/[a-f0-9-]+\/replay$/.test(path)&&request.method==='GET')return json(await resolveRecording(env,path.split('/')[3]));
  if(path==='/api/runs'&&request.method==='POST'){const identity=owner(request),d=await body(request);const name=String(d.name||'').trim(),email=String(d.email||'').trim(),prompt=String(d.prompt||'').trim();if(!name||name.length>32||/^(anonymous|automated|autonomous)$/i.test(name)||/[\x00-\x1f]/.test(name))fail('Enter the actual runner name');if(email.length>200||!/^\S+@\S+\.\S+$/.test(email))fail('Enter a valid email');if(!prompt||prompt.length>4000)fail('Enter a task up to 4,000 characters');if(!Number.isInteger(d.duration_s)||d.duration_s<60||d.duration_s>180)fail('Choose 60 to 180 seconds');const s=await env.DB.prepare('SELECT * FROM runner WHERE id=1').first();if(!s||Date.now()-s.heartbeat_at>15000||JSON.parse(s.status).ready!==true)fail('Kinex runner is not ready. See its status below Run.',503);if(d.request_id!==undefined&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(d.request_id))fail('Invalid run request ID');const id=d.request_id||crypto.randomUUID(),now=Date.now();try{await env.DB.prepare("INSERT INTO runs(id,owner,runner_name,runner_email,prompt,duration_s,status,created_at,updated_at,active_slot) VALUES(?,?,?,?,?,?,'queued',?,?,1)").bind(id,identity,name,email,prompt,d.duration_s,now,now).run()}catch(e){if(String(e).includes('UNIQUE'))fail('A Kinex run is active. Wait for completion.',409);throw e}return json({id,status:'queued',message:'Submitted to Kinex; the runner will join the normal BluPe queue.'},201)}
  if(/^\/api\/runs\/[a-f0-9-]+\/stop$/.test(path)&&request.method==='POST'){const identity=owner(request),id=path.split('/')[3];const row=await env.DB.prepare('SELECT * FROM runs WHERE id=? AND owner=?').bind(id,identity).first();if(!row)fail('This browser does not own that run',403);if(row.status==='queued')await env.DB.prepare("UPDATE runs SET status='cancelled',active_slot=NULL,stop_requested=1,updated_at=? WHERE id=? AND status='queued'").bind(Date.now(),id).run();else await env.DB.prepare('UPDATE runs SET stop_requested=1,updated_at=? WHERE id=?').bind(Date.now(),id).run();return json({ok:true})}
@@ -97,7 +112,7 @@ for(const run of runs){
   b.onclick=()=>{
    if(openPlaybacks.has(run.id))return;
    const box=document.createElement('div');box.className='playback';
-   const v=document.createElement('video');v.controls=true;v.playsInline=true;v.preload='metadata';v.src=run.replay;
+   const v=document.createElement('video');v.controls=true;v.playsInline=true;v.preload='metadata';v.src='/api/runs/'+run.id+'/video';
    v.addEventListener('error',()=>{
     if(box.querySelector('.replay-error'))return;
     const p=document.createElement('p');p.className='replay-error error';p.textContent='This browser could not play the recording. ';

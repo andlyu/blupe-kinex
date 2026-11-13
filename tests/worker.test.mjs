@@ -43,6 +43,36 @@ async function completedRun(env,episode='ep_offline_recording'){
  return {id,auth,episode};
 }
 function ageLookup(env,id){return env.DB.prepare("UPDATE runs SET snapshot=json_set(snapshot,'$.recording.checked_at',0) WHERE id=?").bind(id).run()}
+test('verified video delivery forwards byte ranges without forwarding browser credentials',async()=>{
+ const env=environment(),{id,episode}=await completedRun(env);const original=globalThis.fetch;
+ const video='https://playground.blupe.io/api/quick-replays/'+episode+'/'+'e'.repeat(64)+'.mp4';
+ try{
+  globalThis.fetch=async()=>Response.json({runs:[{episode_id:episode,robot_id:'robot-ba8413962083809c',model:'Kinex',video_url:video}]});
+  await send(env,'/api/runs/'+id+'/replay');let calls=0;
+  globalThis.fetch=async(input,options)=>{
+   calls++;assert.equal(String(input),video);assert.equal(options.redirect,'error');assert.equal(options.headers.Range,'bytes=2-5');
+   assert.equal(options.headers.Cookie,undefined);assert.equal(options.headers.Authorization,undefined);
+   return new Response(options.method==='HEAD'?null:new Uint8Array([2,3,4,5]),{status:206,headers:{'Content-Type':'video/mp4','Content-Range':'bytes 2-5/10','Content-Length':'4','ETag':'fixture'}})
+  };
+  for(const method of ['GET','HEAD']){
+   const response=await worker.fetch(new Request(url+'/api/runs/'+id+'/video',{method,headers:{Range:'bytes=2-5',Cookie:'private-cookie',Authorization:'private-browser-auth'}}),env);
+   assert.equal(response.status,206);assert.equal(response.headers.get('Content-Range'),'bytes 2-5/10');assert.equal(response.headers.get('Content-Type'),'video/mp4');
+   assert.equal((await response.arrayBuffer()).byteLength,method==='HEAD'?0:4)
+  }
+  const invalid=await worker.fetch(new Request(url+'/api/runs/'+id+'/video',{headers:{Range:'bytes=0-1,3-4'}}),env);assert.equal(invalid.status,416);assert.equal(calls,2);
+  await env.DB.prepare("UPDATE runs SET snapshot=json_set(snapshot,'$.configuration.model','Other') WHERE id=?").bind(id).run();
+  assert.equal((await worker.fetch(new Request(url+'/api/runs/'+id+'/video'),env)).status,409);assert.equal(calls,2)
+ }finally{globalThis.fetch=original}
+});
+test('video delivery rejects wrong upstream media without returning it as a recording',async()=>{
+ const env=environment(),{id,episode}=await completedRun(env);const original=globalThis.fetch;
+ try{
+  const video='https://playground.blupe.io/api/quick-replays/'+episode+'/'+'f'.repeat(64)+'.mp4';
+  globalThis.fetch=async()=>Response.json({runs:[{episode_id:episode,robot_id:'robot-ba8413962083809c',model:'Kinex',video_url:video}]});await send(env,'/api/runs/'+id+'/replay');
+  globalThis.fetch=async()=>new Response('Not a video',{headers:{'Content-Type':'text/html'}});
+  assert.equal((await worker.fetch(new Request(url+'/api/runs/'+id+'/video'),env)).status,502)
+ }finally{globalThis.fetch=original}
+});
 test('recording lookup matches exact episode, approach and station; pending becomes ready without dispatch',async()=>{
  const env=environment(),{id,episode,auth}=await completedRun(env);const original=globalThis.fetch;let requests=[];
  const video='https://playground.blupe.io/api/quick-replays/'+episode+'/'+'a'.repeat(64)+'.mp4';
