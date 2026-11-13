@@ -50,7 +50,7 @@ test('verified video delivery forwards byte ranges without forwarding browser cr
   globalThis.fetch=async()=>Response.json({runs:[{episode_id:episode,robot_id:'robot-ba8413962083809c',model:'Kinex',video_url:video}]});
   await send(env,'/api/runs/'+id+'/replay');let calls=0;
   globalThis.fetch=async(input,options)=>{
-   calls++;assert.equal(String(input),video);assert.equal(options.redirect,'error');assert.equal(options.headers.Range,'bytes=2-5');
+   calls++;assert.equal(String(input),video);assert.equal(options.redirect,'manual');assert.equal(options.headers.Range,'bytes=2-5');
    assert.equal(options.headers.Cookie,undefined);assert.equal(options.headers.Authorization,undefined);
    return new Response(options.method==='HEAD'?null:new Uint8Array([2,3,4,5]),{status:206,headers:{'Content-Type':'video/mp4','Content-Range':'bytes 2-5/10','Content-Length':'4','ETag':'fixture'}})
   };
@@ -70,6 +70,8 @@ test('video delivery rejects wrong upstream media without returning it as a reco
   const video='https://playground.blupe.io/api/quick-replays/'+episode+'/'+'f'.repeat(64)+'.mp4';
   globalThis.fetch=async()=>Response.json({runs:[{episode_id:episode,robot_id:'robot-ba8413962083809c',model:'Kinex',video_url:video}]});await send(env,'/api/runs/'+id+'/replay');
   globalThis.fetch=async()=>new Response('Not a video',{headers:{'Content-Type':'text/html'}});
+  assert.equal((await worker.fetch(new Request(url+'/api/runs/'+id+'/video'),env)).status,502);
+  globalThis.fetch=async()=>Response.redirect('https://unrelated.example.test/video.mp4');
   assert.equal((await worker.fetch(new Request(url+'/api/runs/'+id+'/video'),env)).status,502)
  }finally{globalThis.fetch=original}
 });
