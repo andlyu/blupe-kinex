@@ -21,9 +21,26 @@ test('origin/CSRF, one active run, claim once, owner Stop, and public email reda
  assert.equal((await send(env,'/api/runner/claim',{},auth)).data.run,null);
  assert.equal((await send(env,'/api/runs/'+id+'/stop',{}, {...h,Cookie:'kinex-owner='+'b'.repeat(64),'X-Kinex-CSRF':'b'.repeat(64)})).status,403);
  assert.equal((await send(env,'/api/runs/'+id+'/stop',{},h)).status,200);
- const update=await send(env,'/api/runner/update',{id,status:'running',stage:'Offline fixture'},auth);assert.equal(update.data.stop,true);
+ const queue={entered_at:100,admitted_at:102,home_observed_at:103,session_id:'offline-session'};
+ const update=await send(env,'/api/runner/update',{id,status:'running',stage:'Offline fixture',queue_lifecycle:queue},auth);assert.equal(update.data.stop,true);
+ assert.deepEqual((await send(env,'/api/state')).data.runs[0].queue_lifecycle,queue);
  assert.equal((await send(env,'/api/runner/update',{id,status:'stopped'},auth)).status,200);
  assert.equal((await send(env,'/api/runs',task,h)).status,201);
+});
+test('late and duplicate publications cannot regress newer status or reopen a terminal run',async()=>{
+ const env=environment(),{id,auth}=await completedRun(env,undefined,'running');
+ await send(env,'/api/runner/update',{id,status:'running',publication_sequence:2,stage:'current'},auth);
+ await send(env,'/api/runner/update',{id,status:'queued_robot',publication_sequence:1,stage:'late queued'},auth);
+ assert.equal((await send(env,'/api/state')).data.runs[0].stage,'current');
+ await send(env,'/api/runner/update',{id,status:'completed',publication_sequence:4,stage:'finished',queue_lifecycle:{admitted_at:102}},auth);
+ await send(env,'/api/runner/update',{id,status:'running',stage:'late legacy'},auth);
+ assert.equal((await send(env,'/api/state')).data.runs[0].status,'completed');
+ for(const sequence of [3,4])await send(env,'/api/runner/update',{id,status:'running',publication_sequence:sequence,stage:'late'},auth);
+ await send(env,'/api/runner/update',{id,status:'failed',stage:'late unsequenced'},auth);
+ const run=(await send(env,'/api/state')).data.runs[0];
+ assert.equal(run.status,'completed');assert.equal(run.stage,'finished');assert.equal(run.publication_sequence,4);assert.equal(run.queue_lifecycle.admitted_at,102);
+ assert.equal((await env.DB.prepare('SELECT active_slot FROM runs WHERE id=?').bind(id).first()).active_slot,null);
+ assert.equal((await send(env,'/api/runner/update',{id,status:'failed',publication_sequence:0},auth)).status,400);
 });
 test('queued cancellation cannot be claimed or revived',async()=>{
  const env=environment(),auth={Authorization:'Bearer '+env.RUNNER_TOKEN};await send(env,'/api/runner/heartbeat',{ready:true},auth);
@@ -34,12 +51,12 @@ test('queued cancellation cannot be claimed or revived',async()=>{
 });
 
 // These are synthetic recording-index rows. No model, robot or media request occurs.
-async function completedRun(env,episode='ep_offline_recording'){
+async function completedRun(env,episode='ep_offline_recording',status='completed'){
  const auth={Authorization:'Bearer '+env.RUNNER_TOKEN};await send(env,'/api/runner/heartbeat',{ready:true},auth);
  const {data:{csrf}}=await send(env,'/api/browser');const h={Origin:url,Cookie:'kinex-owner='+csrf,'X-Kinex-CSRF':csrf};
  const {data:{id}}=await send(env,'/api/runs',{name:'Offline fixture',email:'fixture@example.test',prompt:'Synthetic recording fixture; no robot',duration_s:60},h);
  await send(env,'/api/runner/claim',{},auth);
- await send(env,'/api/runner/update',{id,status:'completed',episode_id:episode,configuration:{model:'Kinex'},metrics:{motion_started_at:123}},auth);
+ await send(env,'/api/runner/update',{id,status,episode_id:episode,configuration:{model:'Kinex'},metrics:{motion_started_at:123}},auth);
  return {id,auth,episode};
 }
 function ageLookup(env,id){return env.DB.prepare("UPDATE runs SET snapshot=json_set(snapshot,'$.recording.checked_at',0) WHERE id=?").bind(id).run()}
