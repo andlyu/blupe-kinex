@@ -188,3 +188,49 @@ test('missing archive model requires exact independently matched live queue cont
   assert.equal(result.state,'ready');assert.equal(result.attribution_source,'matched_live_queue_context');assert.equal(result.recording_index_model,null);assert.equal(result.url,video);
  }finally{globalThis.fetch=original}
 });
+
+function memoryBucket(env){
+ const objects=new Map();let gets=0;
+ env.BUCKET={async put(key,data,options){objects.set(key,{data:new Uint8Array(data),...options});return {key}},async head(key){const v=objects.get(key);return v?{size:v.data.length,customMetadata:v.customMetadata}:null},async get(key,{range}){gets++;const v=objects.get(key);return v?{body:v.data.slice(range.offset,range.offset+range.length),size:v.data.length,customMetadata:v.customMetadata}:null}};
+ return {objects,get gets(){return gets}};
+}
+async function localFixture(){
+ const env=environment(),bucket=memoryBucket(env),{id,episode,auth}=await completedRun(env);
+ await send(env,'/api/runner/update',{id,status:'completed',session_id:'session_fixture'},auth);
+ const bytes=new Uint8Array(32);bytes.set(new TextEncoder().encode('ftyp'),4);
+ const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');const now=Date.now()/1000;
+ const meta={episode_id:episode,session_id:'session_fixture',robot_id:'robot-ba8413962083809c',model:'Kinex',sha256,bytes:32,duration_s:1.5,first_capture_at:now-2,last_capture_at:now-1,started_at:now-3,ended_at:now-.5,sample_count:3,capture_fps:2,capture_partial:false};
+ const upload=async(changes={},data=bytes,extra={})=>worker.fetch(new Request(url+'/api/runner/recordings/'+id,{method:'POST',body:data,headers:{...auth,'Content-Type':'video/mp4','Content-Length':String(data.byteLength),'X-Kinex-Recording':JSON.stringify({...meta,...changes}),...extra}}),env);
+ return {env,bucket,id,episode,auth,bytes,meta,upload};
+}
+test('only authenticated matched Kinex camera recordings become retained playback',async()=>{
+ const f=await localFixture();
+ assert.equal((await f.upload({},f.bytes,{Authorization:'Bearer wrong'})).status,401);
+ for(const changes of [{session_id:'another'},{episode_id:'ep_other'},{model:'Other'}])assert.equal((await f.upload(changes)).status,409);
+ for(const changes of [{sha256:'a'.repeat(64)},{sample_count:1},{duration_s:99}])assert.equal((await f.upload(changes)).status,400);
+ assert.equal((await f.upload({},new Uint8Array(33),{'Content-Length':'32'})).status,413);assert.equal(f.bucket.objects.size,0);
+ assert.equal((await f.upload()).status,200);assert.equal(f.bucket.objects.size,1);
+ const run=(await send(f.env,'/api/state')).data.runs[0];assert.equal(run.replay,'/api/runs/'+f.id+'/video');assert.equal(run.recording.source,'worker_top_camera');assert.equal(run.recording.preview_speed,1);assert.equal(run.recording.capture_partial,false);
+ const playback=await send(f.env,'/api/runs/'+f.id+'/replay');assert.equal(playback.data.state,'ready');assert.equal(playback.data.source,'worker_top_camera');
+ await send(f.env,'/api/runner/update',{id:f.id,status:'completed',stage:'Later cleanup'},f.auth);assert.equal((await send(f.env,'/api/state')).data.runs[0].replay,run.replay);
+});
+test('retained playback supports GET HEAD suffix and conditional ranges without any external fetch',async()=>{
+ const f=await localFixture();await f.upload();const original=globalThis.fetch;globalThis.fetch=()=>{throw new Error('No external media path is allowed for local footage')};
+ try{
+  const video=url+'/api/runs/'+f.id+'/video';let r=await worker.fetch(new Request(video,{headers:{Range:'bytes=4-7',Cookie:'browser-private',Authorization:'browser-private'}}),f.env);
+  assert.equal(r.status,206);assert.equal(r.headers.get('Content-Range'),'bytes 4-7/32');assert.equal(await r.text(),'ftyp');const etag=r.headers.get('ETag');
+  const count=f.bucket.gets;r=await worker.fetch(new Request(video,{method:'HEAD',headers:{Range:'bytes=-8'}}),f.env);assert.equal(r.status,206);assert.equal(r.headers.get('Content-Length'),'8');assert.equal((await r.arrayBuffer()).byteLength,0);assert.equal(f.bucket.gets,count);
+  r=await worker.fetch(new Request(video,{headers:{Range:'bytes=-8'}}),f.env);assert.equal(r.status,206);assert.equal((await r.arrayBuffer()).byteLength,8);
+  r=await worker.fetch(new Request(video,{headers:{'If-None-Match':etag}}),f.env);assert.equal(r.status,304);
+  r=await worker.fetch(new Request(video,{headers:{Range:'bytes=4-7','If-Range':'"different"'}}),f.env);assert.equal(r.status,200);assert.equal((await r.arrayBuffer()).byteLength,32);
+  for(const Range of ['bytes=999-','bytes=-0','bytes=2-1','bytes=0-1,3-4']){r=await worker.fetch(new Request(video,{headers:{Range}}),f.env);assert.equal(r.status,416);assert.equal(r.headers.get('Content-Range'),'bytes */32')}
+  await f.env.DB.prepare("UPDATE runs SET snapshot=json_set(snapshot,'$.configuration.model','Other') WHERE id=?").bind(f.id).run();assert.equal((await worker.fetch(new Request(video),f.env)).status,409);
+ }finally{globalThis.fetch=original}
+});
+test('recording cannot report ready after session attribution changes during storage',async()=>{
+ const f=await localFixture(),put=f.env.BUCKET.put;
+ f.env.BUCKET.put=async(...args)=>{const result=await put(...args);await f.env.DB.prepare("UPDATE runs SET snapshot=json_set(snapshot,'$.session_id','another-session') WHERE id=?").bind(f.id).run();return result};
+ assert.equal((await f.upload()).status,409);assert.equal((await send(f.env,'/api/state')).data.runs[0].replay,null);
+ const missing=await localFixture();await missing.env.DB.prepare("UPDATE runs SET snapshot=json_set(snapshot,'$.session_id',NULL) WHERE id=?").bind(missing.id).run();
+ assert.equal((await missing.upload({session_id:null})).status,409);assert.equal(missing.bucket.objects.size,0);
+});
