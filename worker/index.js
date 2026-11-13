@@ -58,7 +58,8 @@ async function serveRecording(request,env,id){
  if(new URL(source).origin!=='https://playground.blupe.io')return Response.redirect(source,302);
  const range=request.headers.get('Range'),headers={'Accept':'video/mp4'};
  if(range){if(range.length>80||!/^bytes=(?:\d+-\d*|-\d+)$/.test(range))fail('Unsupported video byte range',416);headers.Range=range}
- const upstream=await fetch(source,{method:request.method,headers,redirect:'error',signal:AbortSignal.timeout(15000)});
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);let upstream;
+ try{upstream=await fetch(source,{method:request.method,headers,redirect:'error',signal:controller.signal})}finally{clearTimeout(timer)}
  if(![200,206,304,416].includes(upstream.status))fail('Recording delivery is temporarily unavailable',502);
  if(upstream.status!==304&&upstream.status!==416&&!/^video\/mp4(?:;|$)/i.test(upstream.headers.get('Content-Type')||''))fail('Recording returned an unsupported media type',502);
  const output=new Headers({'Content-Type':'video/mp4','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Accept-Ranges':'bytes'});

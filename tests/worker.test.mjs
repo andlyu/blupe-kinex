@@ -73,6 +73,17 @@ test('video delivery rejects wrong upstream media without returning it as a reco
   assert.equal((await worker.fetch(new Request(url+'/api/runs/'+id+'/video'),env)).status,502)
  }finally{globalThis.fetch=original}
 });
+test('video header timeout is cleared before streaming the retained media body',async()=>{
+ const env=environment(),{id,episode}=await completedRun(env);const original=globalThis.fetch,originalSet=setTimeout,originalClear=clearTimeout;const active=new Set();
+ try{
+  const video='https://playground.blupe.io/api/quick-replays/'+episode+'/'+'a'.repeat(64)+'.mp4';
+  globalThis.fetch=async()=>Response.json({runs:[{episode_id:episode,robot_id:'robot-ba8413962083809c',model:'Kinex',video_url:video}]});await send(env,'/api/runs/'+id+'/replay');
+  globalThis.setTimeout=(fn,ms)=>{const timer=originalSet(fn,ms);active.add(timer);return timer};globalThis.clearTimeout=timer=>{active.delete(timer);originalClear(timer)};
+  let signal;globalThis.fetch=async(_,options)=>{signal=options.signal;return new Response(new Uint8Array([1,2,3]),{headers:{'Content-Type':'video/mp4'}})};
+  const response=await worker.fetch(new Request(url+'/api/runs/'+id+'/video'),env);
+  assert.equal(active.size,0);assert.equal(signal.aborted,false);assert.deepEqual([...new Uint8Array(await response.arrayBuffer())],[1,2,3])
+ }finally{for(const timer of active)originalClear(timer);globalThis.fetch=original;globalThis.setTimeout=originalSet;globalThis.clearTimeout=originalClear}
+});
 test('recording lookup matches exact episode, approach and station; pending becomes ready without dispatch',async()=>{
  const env=environment(),{id,episode,auth}=await completedRun(env);const original=globalThis.fetch;let requests=[];
  const video='https://playground.blupe.io/api/quick-replays/'+episode+'/'+'a'.repeat(64)+'.mp4';
